@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ziyaretçi Panosu</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 flex items-center justify-center h-screen font-sans">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+      <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">
+        Ziyaretçi Panosu 🚀
+      </h1>
+
+      <div class="flex gap-2 mb-6">
+        <input
+          type="text"
+          id="isimInput"
+          placeholder="İsminizi yazın..."
+          class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          onclick="ziyaretciEkle()"
+          class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
+        >
+          Ekle
+        </button>
+      </div>
+
+      <div
+        class="bg-gray-50 border p-3 rounded-md mb-4 text-sm text-gray-600 text-center font-medium"
+        id="kaynakGosterge"
+      >
+        Veri bekleniyor...
+      </div>
+
+      <ul
+        id="ziyaretciListesi"
+        class="space-y-2 mb-6 max-h-48 overflow-y-auto"
+      ></ul>
+
+      <button
+        onclick="verileriGetir()"
+        class="w-full bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition"
+      >
+        Listeyi Yenile (Cache Testi)
+      </button>
+    </div>
+
+    <script>
+      const API_URL = "http://localhost:8000";
+
+      async function verileriGetir() {
+        try {
+          const response = await fetch(`${API_URL}/ziyaretciler`);
+          const data = await response.json();
+
+          document.getElementById("kaynakGosterge").innerText =
+            `Kaynak: ${data.kaynak}`;
+
+          const liste = document.getElementById("ziyaretciListesi");
+          liste.innerHTML = "";
+
+          data.veriler.forEach((isim) => {
+            const li = document.createElement("li");
+            li.className = "bg-gray-200 px-3 py-2 rounded-md text-gray-800";
+            li.innerText = isim;
+            liste.appendChild(li);
+          });
+        } catch (error) {
+          console.error("Hata:", error);
+        }
+      }
+
+      async function ziyaretciEkle() {
+        const isim = document.getElementById("isimInput").value;
+        if (!isim) return alert("Lütfen bir isim yazın!");
+
+        try {
+          await fetch(`${API_URL}/ziyaretci/${isim}`, { method: "POST" });
+          document.getElementById("isimInput").value = "";
+          verileriGetir();
+        } catch (error) {
+          console.error("Hata:", error);
+        }
+      }
+
+      window.onload = verileriGetir;
+    </script>
+  </body>
+</html>

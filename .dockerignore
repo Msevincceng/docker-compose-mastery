@@ -1,0 +1,20 @@
+# Git dosyaları
+.git
+.gitignore
+
+# Python sanal ortam (Virtual Environment) klasörleri
+.venv/
+venv/
+env/
+
+# Python önbellek dosyaları (Gereksiz ağırlık yapar)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Güvenlik: Çevre değişkenlerinin imaja sızmasını engeller
+.env
+
+# İşletim sistemi kalıntıları (Özellikle macOS için)
+.DS_Store

@@ -3,10 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis
 import psycopg2
 import json
-import os  
+import os
 
 app = FastAPI()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,18 +15,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REDIS_HOST = "redis_cache"
-DB_HOST = "postgres_db"
+REDIS_HOST = os.getenv("REDIS_HOST", "redis_cache")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_TLS = os.getenv("REDIS_TLS", "false").lower() == "true"
 
-cache = redis.Redis(host=REDIS_HOST, port=6379, decode_responses=True)
+DB_HOST = os.getenv("DB_HOST", "postgres_db")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+
+cache = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    ssl=REDIS_TLS,
+    decode_responses=True
+)
 
 def get_db_connection():
-    
     return psycopg2.connect(
         host=DB_HOST,
-        database=os.getenv("DB_NAME", "meydan_db"),
+        port=DB_PORT,
+        database=os.getenv("DB_NAME", "projedb"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "password")
+        password=os.getenv("DB_PASSWORD")
     )
 
 @app.on_event("startup")
@@ -52,16 +60,20 @@ def ziyaretci_ekle(isim: str):
     conn.commit()
     cur.close()
     conn.close()
-    
+
     cache.delete("ziyaretci_listesi")
     return {"mesaj": f"{isim} arşive eklendi!"}
 
 @app.get("/ziyaretciler")
 def ziyaretcileri_getir():
     cached_data = cache.get("ziyaretci_listesi")
+
     if cached_data:
-        return {"kaynak": "Redis (Çalışma Masası'ndan geldi 🚀)", "veriler": json.loads(cached_data)}
-    
+        return {
+            "kaynak": "Redis (Çalışma Masası'ndan geldi 🚀)",
+            "veriler": json.loads(cached_data)
+        }
+
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT isim FROM ziyaretciler")
@@ -69,7 +81,10 @@ def ziyaretcileri_getir():
     ziyaretciler = [row[0] for row in rows]
     cur.close()
     conn.close()
-    
+
     cache.set("ziyaretci_listesi", json.dumps(ziyaretciler), ex=20)
-    
-    return {"kaynak": "PostgreSQL (Arşiv Odası'ndan geldi 🐢)", "veriler": ziyaretciler}
+
+    return {
+        "kaynak": "PostgreSQL (Arşiv Odası'ndan geldi 🐢)",
+        "veriler": ziyaretciler
+    }

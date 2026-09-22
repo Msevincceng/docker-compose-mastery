@@ -5,10 +5,7 @@ on:
   push:
     branches:
       - dev
-    paths:
-      - "backend/**"
-      - ".github/workflows/deploy-backend.yml"
-
+   
 env:
   AWS_REGION: us-east-1
   PROJECT_NAME: docker-compose-mastery

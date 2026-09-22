@@ -16,8 +16,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REDIS_HOST = "redis_cache"
-DB_HOST = "postgres_db"
+DB_HOST = os.getenv("DB_HOST")
+REDIS_HOST = os.getenv("REDIS_HOST")
 
 cache = redis.Redis(host=REDIS_HOST, port=6379, decode_responses=True)
 

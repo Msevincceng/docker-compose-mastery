@@ -1,0 +1,139 @@
+name: Build and Deploy Backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT_NAME: docker-compose-mastery
+  CONTAINER_NAME: backend-container
+  ENVIRONMENT: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-backend-dev
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Backend image
+    runs-on: ubuntu-latest
+
+    outputs:
+      image-uri: ${{ steps.build-image.outputs.image-uri }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set naming
+        id: naming
+        run: |
+          set -euo pipefail
+
+          NAME_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+
+          echo "NAME_PREFIX=$NAME_PREFIX" >> "$GITHUB_ENV"
+          echo "ECR_REPOSITORY=proje-test-backend-ecr" >> "$GITHUB_ENV"
+          echo "ECS_SERVICE=proje-backend-task-service-vuvzk0ad" >> "$GITHUB_ENV"
+          echo "ECS_CLUSTER=proje-cluster" >> "$GITHUB_ENV"
+          echo "ECS_TASK_DEFINITION=proje-backend-task" >> "$GITHUB_ENV"
+
+          echo "ecs-service=proje-backend-task-service-vuvzk0ad" >> "$GITHUB_OUTPUT"
+          echo "ecs-cluster=proje-cluster" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::942091277474:role/GitHub-Proje-OIDC
+          role-session-name: GitHub-Actions-Backend-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Backend image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}-backend
+        run: |
+          set -euo pipefail
+
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            -t "$IMAGE_URI" \
+            -f "./backend/Dockerfile" \
+            "./backend"
+
+          docker push "$IMAGE_URI"
+
+          echo "image-uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy Backend (rolling)
+    runs-on: ubuntu-latest
+    needs: build
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set naming
+        id: naming
+        run: |
+          set -euo pipefail
+
+          NAME_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+
+          echo "NAME_PREFIX=$NAME_PREFIX" >> "$GITHUB_ENV"
+          echo "ECR_REPOSITORY=proje-test-backend-ecr" >> "$GITHUB_ENV"
+          echo "ECS_SERVICE=proje-backend-task-service-vuvzk0ad" >> "$GITHUB_ENV"
+          echo "ECS_CLUSTER=proje-cluster" >> "$GITHUB_ENV"
+          echo "ECS_TASK_DEFINITION=proje-backend-task" >> "$GITHUB_ENV"
+
+          echo "ecs-service=proje-backend-task-service-vuvzk0ad" >> "$GITHUB_OUTPUT"
+          echo "ecs-cluster=proje-cluster" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::942091277474:role/GitHub-Proje-OIDC
+          role-session-name: GitHub-Actions-Backend-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          set -euo pipefail
+
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_DEFINITION" \
+            --query taskDefinition > task-definition.json
+
+      - name: Render new task definition with new image
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ needs.build.outputs.image-uri }}
+
+      - name: Deploy via ECS rolling update
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ steps.naming.outputs.ecs-service }}
+          cluster: ${{ steps.naming.outputs.ecs-cluster }}
+          wait-for-service-stability: true
